@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
-import json
+from datetime import datetime
 import socket
 import threading
+import json
 from django.core.management.base import BaseCommand
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -10,7 +10,7 @@ class TCPLogServer:
     def __init__(self, host='0.0.0.0', port=9000):
         self.host = host
         self.port = port
-        self.logs = []  # List to store logs with timestamps
+        self.logs = []  # Initialize the logs list
 
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -21,50 +21,33 @@ class TCPLogServer:
         while True:
             client_socket, addr = server_socket.accept()
             print(f"Connection from {addr}")
-            
-            # Read data from the client in a loop
-            data_buffer = ""
-            while True:
-                data = client_socket.recv(1024)
-                if not data:
-                    break  # Client has closed the connection
-                
-                data_buffer += data.decode('utf-8')
-
-            # Process accumulated data
-            if data_buffer:
-                self.handle_log(data_buffer)
+            data = client_socket.recv(1024)
+            if data:
+                data = data.decode('utf-8').rstrip('\x00')  # Remove null terminator
+                self.handle_log(data)
             client_socket.close()
 
     def handle_log(self, log_data):
         try:
-            log_data = log_data.rstrip('\x00')
+            # Parse the JSON data
             logs = json.loads(log_data)
-            if not isinstance(logs, list):  # Ensure logs are in array format
-                logs = [logs]
 
+            # Add timestamp to logs
             timestamped_logs = {
-                'timestamp': datetime.now(),
+                'timestamp': datetime.now().isoformat(),  # ISO format for consistency
                 'logs': logs
             }
-            self.logs.extend(logs)  # Store multiple logs
-            print("Received logs:", logs)
-
+            self.logs.append(timestamped_logs)
             # Send the logs to WebSocket clients
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 "logs_group", {
                     "type": "send_logs",
-                    "logs": logs  # Send all logs as an array
+                    "logs": logs
                 }
             )
-        except json.JSONDecodeError:
-            print("Invalid JSON received")
-
-    def get_logs_last_hour(self):
-        one_hour_ago = datetime.now() - timedelta(hours=1)
-        recent_logs = [log for log in self.logs if log['timestamp'] > one_hour_ago]
-        return recent_logs
+        except json.JSONDecodeError as e:
+            print(f"Invalid JSON received: {e}")
 
 # Create a new management command to start the TCP server
 class Command(BaseCommand):
@@ -78,7 +61,3 @@ class Command(BaseCommand):
         thread.start()
 
         print("TCP Log Server is now running alongside Django...")
-
-        # Example of querying logs from the last hour
-        recent_logs = server.get_logs_last_hour()
-        print("Logs from the last hour:", recent_logs)

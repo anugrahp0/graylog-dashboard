@@ -22,7 +22,7 @@ class GraylogWebhookView(View):
     def post(self, request, *args, **kwargs):
         try:
             logs = json.loads(request.body)
-            print("Logs :: ")
+            
             # Forward logs to WebSocket clients
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
@@ -127,17 +127,17 @@ class GraylogLogsViewSet(viewsets.ViewSet):
 
         start_time = specific_time.replace(second=0, microsecond=0)
         end_time = start_time + timedelta(minutes=1)
-
+        print(f"Start time ::  {start_time}")
         graylog_url = 'http://192.168.109.130:9000/api/search/universal/absolute'
         auth = (settings.GRAYLOG_API_USER, settings.GRAYLOG_API_PASSWORD)
 
         params = {
-            'query': '*',
+            'query':"*",
             'from': start_time.isoformat(timespec='milliseconds'),
             'to': end_time.isoformat(timespec='milliseconds'),
             'limit': 150,
-            'filter': 'streams:000000000000000000000001',
-            'fields': 'message,timestamp,source,level,file,function,line',
+            'filter': 'streams:000000000000000000000001',  # Stream ID (replace with actual stream ID)
+            'fields': 'message,timestamp,source,level',
         }
 
         headers = {

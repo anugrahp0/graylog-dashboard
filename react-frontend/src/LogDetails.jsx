@@ -23,8 +23,12 @@ function LogDetails() {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const utcTime = moment(time).utc().toISOString();
-        console.log("UTC Time:", utcTime, "Original Time:", time);
+        // Verify if the time parameter is received correctly
+        console.log("Original Time Parameter:", time);
+
+        // Convert the time parameter to UTC format
+        const utcTime = moment.tz(time, "Asia/Kolkata").utc().toISOString();
+        console.log("Converted UTC Time:", utcTime);
 
         const response = await axios.get(`/api/graylog-logs/specific_time/`, {
           params: { time: utcTime },
@@ -47,8 +51,8 @@ function LogDetails() {
           };
         });
 
+        console.log("Fetched Data:", data); // Check the fetched data
         setLogs(data);
-        console.log("Fetched Logs:", data);
       } catch (error) {
         console.error("Failed to fetch logs", error);
         setError("Failed to fetch logs. Please try again later.");
@@ -70,7 +74,7 @@ function LogDetails() {
     (log) => selectedLevels.length === 0 || selectedLevels.includes(log.level)
   );
 
-  console.log("Filtered Logs After Filter:", filteredLogs);
+  console.log("Filtered Logs:", filteredLogs);
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
