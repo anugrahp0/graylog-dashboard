@@ -25,6 +25,7 @@ router.register(r'api/graylog-logs', GraylogLogsViewSet, basename='graylog-logs'
 
 urlpatterns = [
     path('', include(router.urls)),
+    
 ]
 
 

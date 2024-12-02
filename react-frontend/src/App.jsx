@@ -1,24 +1,19 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import Plot from "react-plotly.js";
 import moment from "moment-timezone";
-import {
-  BrowserRouter as Router,
-  Route,
-  Routes,
-  useNavigate,
-} from "react-router-dom";
+import { Route, Routes, useNavigate } from "react-router-dom";
 import LogDetails from "./LogDetails";
 
 function App() {
   const [logs, setLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
   const [startTime, setStartTime] = useState(
-    moment().tz("Asia/Kolkata").subtract(24, "hours").format("YYYY-MM-DDTHH:mm")
+    moment().tz("Asia/Kolkata").subtract(1, "hours").format("YYYY-MM-DDTHH:mm")
   );
   const [endTime, setEndTime] = useState(
     moment().tz("Asia/Kolkata").format("YYYY-MM-DDTHH:mm")
   );
+  var mylogs = [];
   const [query, setQuery] = useState("");
   const [selectedLevels, setSelectedLevels] = useState([]);
   const levelMap = {
@@ -31,24 +26,34 @@ function App() {
     Informational: 6,
     Debug: 7,
   };
-  const navigate = useNavigate();
 
-  const fetchLogs = async () => {
-    try {
+  const navigate = useNavigate(); // This should work now
+
+  useEffect(() => {
+    // Initialize the WebSocket connection
+    const socket = new WebSocket("ws://192.168.0.109:8000/ws/graylog-logs/");
+
+    socket.onopen = () => {
+      console.log("WebSocket connection established");
+
+      // Request logs for the last hour
+      socket.send(
+        JSON.stringify({
+          from: moment.tz(startTime, "Asia/Kolkata").utc().toISOString(),
+          to: moment.tz(endTime, "Asia/Kolkata").utc().toISOString(),
+          query,
+        })
+      );
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log("Received logs:", data);
+      mylogs.push(data);
       const startMoment = moment.tz(startTime, "Asia/Kolkata").utc();
       const endMoment = moment.tz(endTime, "Asia/Kolkata").utc();
 
-      const response = await axios.get("/api/graylog-logs/", {
-        params: {
-          from: startMoment.toISOString(),
-          to: endMoment.toISOString(),
-          query,
-        },
-      });
-
-      console.log("Fetched logs:", response.data);
-
-      const data = response.data
+      const newLogs = data
         .map((log) => {
           const logData = JSON.parse(log.message.replace(/'/g, '"'));
           logData.timestamp = moment.utc(logData.timestamp);
@@ -61,10 +66,10 @@ function App() {
         .filter((log) => {
           return selectedLevels.length > 0
             ? selectedLevels.includes(log.level)
-            : true; // If no levels are selected, include all logs
+            : true;
         });
 
-      const aggregatedLogs = data.reduce((acc, log) => {
+      const aggregatedLogs = newLogs.reduce((acc, log) => {
         const timeKey = log.timestamp.format("YYYY-MM-DDTHH:mm");
         if (!acc[timeKey]) {
           acc[timeKey] = { ...log, messageCount: 0 };
@@ -77,15 +82,29 @@ function App() {
         (a, b) => a.timestamp - b.timestamp
       );
 
-      setLogs(sortedLogs);
-      setFilteredLogs(sortedLogs);
-    } catch (error) {
-      console.error("Failed to fetch logs", error);
-    }
-  };
+      // Update logs with new and existing logs
+      setLogs((prevLogs) => {
+        const updatedLogs = [...prevLogs, ...sortedLogs];
+        return updatedLogs.sort((a, b) => a.timestamp - b.timestamp);
+      });
+      setFilteredLogs((prevFilteredLogs) => {
+        const updatedFilteredLogs = [...prevFilteredLogs, ...sortedLogs];
+        return updatedFilteredLogs.sort((a, b) => a.timestamp - b.timestamp);
+      });
+    };
 
-  useEffect(() => {
-    fetchLogs();
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    socket.onclose = (event) => {
+      console.log("WebSocket connection closed:", event);
+    };
+
+    // Clean up the WebSocket connection on component unmount
+    return () => {
+      socket.close();
+    };
   }, [startTime, endTime, query, selectedLevels]);
 
   const handlePlotClick = async (event) => {
@@ -100,7 +119,18 @@ function App() {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    fetchLogs();
+
+    // Send filter data to server through WebSocket
+    const socket = new WebSocket("ws://192.168.0.109:8000/ws/graylog-logs/");
+    socket.onopen = () => {
+      socket.send(
+        JSON.stringify({
+          from: moment.tz(startTime, "Asia/Kolkata").utc().toISOString(),
+          to: moment.tz(endTime, "Asia/Kolkata").utc().toISOString(),
+          query,
+        })
+      );
+    };
   };
 
   const handleLevelChange = (level) => {
@@ -186,81 +216,45 @@ function App() {
       </form>
 
       {filteredLogs.length > 0 ? (
-        <div className="bg-white shadow-lg rounded-lg p-6 max-w-3xl mx-auto cursor-pointer">
+        <div className="bg-white shadow-lg rounded-lg p-6">
           <Plot
             data={[
               {
-                x: filteredLogs.map((log) =>
-                  log.timestamp.tz("Asia/Kolkata").format("HH:mm")
-                ),
+                x: filteredLogs.map((log) => log.timestamp.toDate()),
                 y: filteredLogs.map((log) => log.messageCount),
-                type: "scatter",
                 mode: "markers",
-                marker: { size: 10, color: "#4A90E2", opacity: 0.8 },
-                text: filteredLogs.map((log) => log._id),
+                type: "scatter",
+                marker: { color: "blue", size: 10 },
+                text: filteredLogs.map((log) => log.message),
+                hoverinfo: "text",
               },
             ]}
             layout={{
               xaxis: {
-                title: {
-                  text: "Time (IST)",
-                  font: {
-                    size: 18,
-                  },
-                },
-                tickformat: "%I:%M %p",
-                showticklabels: true,
-                showgrid: true,
-                zeroline: true,
-                zerolinecolor: "#000000",
-                zerolinewidth: 2,
-                range: ["00:00", "23:59"],
+                title: "Time",
+                rangemode: "tozero",
               },
               yaxis: {
-                title: {
-                  text: "Event Count",
-                  font: {
-                    size: 18,
-                  },
-                },
-                showticklabels: true,
-                showgrid: true,
-                zeroline: true,
-                zerolinecolor: "#000000",
-                zerolinewidth: 2,
-                linecolor: "#000000",
-                linewidth: 2,
-                range: [
-                  0,
-                  Math.max(...filteredLogs.map((log) => log.messageCount)) + 10,
-                ],
+                title: "Event Count",
+                rangemode: "tozero",
               },
-              margin: {
-                l: 50,
-                r: 50,
-                b: 50,
-                t: 50,
+              title: {
+                text: "Events over Time",
+                font: { size: 24 },
               },
             }}
             onClick={handlePlotClick}
           />
         </div>
       ) : (
-        <p className="text-center text-gray-600 text-lg">No logs available</p>
+        <p className="text-center text-gray-700">No logs available</p>
       )}
+
+      <Routes>
+        <Route path="/log/:minute" element={<LogDetails />} />
+      </Routes>
     </div>
   );
 }
 
-function AppWrapper() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/log/:time" element={<LogDetails />} />
-      </Routes>
-    </Router>
-  );
-}
-
-export default AppWrapper;
+export default App;

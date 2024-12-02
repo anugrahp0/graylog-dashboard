@@ -25,12 +25,13 @@ SECRET_KEY = 'django-insecure-5kgmire(m#5(7$z+=seo0rowxlu-ycnny8((1!d!_)oia)!!=z
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -38,8 +39,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'api'
+    'api',
+    
 ]
+
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -69,7 +73,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'graylog.wsgi.application'
+# WSGI_APPLICATION = 'graylog.wsgi.application'
 
 
 # Database
@@ -129,3 +133,8 @@ GRAYLOG_API_USER = 'admin'  # Replace with your Graylog API username
 GRAYLOG_API_PASSWORD = 'admin'  # Replace with your Graylog API password
 
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}

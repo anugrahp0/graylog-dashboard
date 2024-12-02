@@ -7,6 +7,59 @@ from .serializers import LogSerializer
 from datetime import datetime, timedelta, timezone
 import requests
 
+# views.py
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.views import View
+import json
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+class GraylogWebhookView(View):
+    @method_decorator(csrf_exempt)
+    def post(self, request, *args, **kwargs):
+        try:
+            logs = json.loads(request.body)
+            print("Logs :: ")
+            # Forward logs to WebSocket clients
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "logs_group", {
+                    "type": "send_logs",
+                    "logs": logs
+                }
+            )
+
+            return JsonResponse({'status': 'success'})
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class GraylogLogsViewSet(viewsets.ViewSet):
     def list(self, request):
         graylog_url = 'http://192.168.109.130:9000/api/search/universal/absolute'
